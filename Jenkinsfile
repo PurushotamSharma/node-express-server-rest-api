@@ -34,8 +34,8 @@ pipeline {
         stage("Deploy") {
             steps {
                 echo "This is deploying the code to AWS EKS"
-                // Note: If you want to specify a namespace, add it here.
-                withKubeConfig([credentialsId: 'aws-eks-kubeconfig']) {  
+                withCredentials([kubeconfigFile(credentialsId: 'aws-eks-kubeconfig', variable: 'KUBECONFIG')]) {
+                    echo "Docker repository: ${env.dockerHubUser}/rest-api"
                     // Upgrade or install the Helm release
                     sh "helm upgrade --install rest-api-release ./helm-chart --set image.repository=${env.dockerHubUser}/rest-api --set image.tag=latest --wait --timeout=300s"
                 }
@@ -46,7 +46,7 @@ pipeline {
     post {
         failure {
             echo "Deployment failed, rolling back to the previous version"
-            withKubeConfig([credentialsId: 'aws-eks-kubeconfig']) {  
+            withCredentials([kubeconfigFile(credentialsId: 'aws-eks-kubeconfig', variable: 'KUBECONFIG')]) {
                 sh "helm rollback rest-api-release"
             }
         }
