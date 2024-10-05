@@ -1,64 +1,49 @@
 pipeline {
     agent any
     
-    environment {
-        DOCKER_IMAGE = "rest-api"
-        DOCKER_TAG = "latest"
-    }
-    
     stages {
-        stage("Initialize") {
+        stage("Hello") {
             steps {
                 echo "Starting the Pipeline"
-                script {
-                    env.GIT_COMMIT_SHORT = sh(script: "git rev-parse --short HEAD", returnStdout: true).trim()
-                }
             }
         }
-        
-        stage("Clone Repository") {
+        stage("Code") {
             steps {
-                echo "Cloning the code"
+                echo "This is cloning the code"
                 git url: "https://github.com/PurushotamSharma/node-express-server-rest-api.git", branch: "master"
-                echo "Repository cloned successfully"
+                echo "Cloning the code successfully"
             }
         }
-        
-        stage("Build Docker Image") {
+        stage("Build") {
             steps {
-                echo "Building Docker image"
-                sh "docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} ."
-                sh "docker tag ${DOCKER_IMAGE}:${DOCKER_TAG} ${DOCKER_IMAGE}:${env.GIT_COMMIT_SHORT}"
+                echo "This is building the code"
+                sh "whoami"
+                sh "docker build -t rest-api:latest ."
             }
         }
-        
-        stage("Push to Docker Hub") {
+        stage("Push to the Docker Hub") {
             steps {
-                echo "Pushing image to Docker Hub"
-                withCredentials([usernamePassword(credentialsId: "dockerhubcred", passwordVariable: "DOCKER_PASSWORD", usernameVariable: "DOCKER_USERNAME")]) {
-                    sh "echo ${DOCKER_PASSWORD} | docker login -u ${DOCKER_USERNAME} --password-stdin"
-                    sh "docker tag ${DOCKER_IMAGE}:${DOCKER_TAG} ${DOCKER_USERNAME}/${DOCKER_IMAGE}:${DOCKER_TAG}"
-                    sh "docker push ${DOCKER_USERNAME}/${DOCKER_IMAGE}:${DOCKER_TAG}"
-                    sh "docker push ${DOCKER_USERNAME}/${DOCKER_IMAGE}:${env.GIT_COMMIT_SHORT}"
+                echo "This is pushing the image to Docker Hub"
+                withCredentials([usernamePassword(credentialsId: "dockerhubcred", passwordVariable: "dockerHubPass", usernameVariable: "dockerHubUser")]) {
+                    sh "docker login -u ${env.dockerHubUser} -p ${env.dockerHubPass}"
+                    sh "docker tag rest-api:latest ${env.dockerHubUser}/rest-api:latest"
+                    sh "docker push ${env.dockerHubUser}/rest-api:latest"
                 }
             }
         }
-        
-        stage("Deploy to AWS EKS") {
+        stage("Deploy") {
             steps {
-                echo "Deploying to AWS EKS"
+                echo "This is deploying the code to AWS EKS"
                 withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']]) {
                     withKubeConfig([credentialsId: 'aws-eks-kubeconfig', serverUrl: 'https://C7C8E947EF50560DA55D08142769EEDA.gr7.us-east-2.eks.amazonaws.com']) {
+                        // Verify AWS and Kubernetes configuration
+                        sh "aws eks get-token --cluster-name rest-api"
                         sh "kubectl config view --raw"
                         sh "kubectl get nodes"
-                        
-                        echo "Deploying with Helm"
-                        sh """
-                            helm upgrade --install rest-api-release ./helm-chart \
-                            --set image.repository=${DOCKER_USERNAME}/${DOCKER_IMAGE} \
-                            --set image.tag=${env.GIT_COMMIT_SHORT} \
-                            --wait --timeout=300s
-                        """
+
+                        echo "Docker repository: ${env.dockerHubUser}/rest-api"
+                        // Upgrade or install the Helm release
+                        sh "helm upgrade --install rest-api-release ./helm-chart --set image.repository=${env.dockerHubUser}/rest-api --set image.tag=latest --wait --timeout=300s"
                     }
                 }
             }
@@ -66,20 +51,11 @@ pipeline {
     }
     
     post {
-        success {
-            echo "Deployment successful!"
-        }
         failure {
-            echo "Deployment failed, attempting rollback"
-            withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']]) {
-                withKubeConfig([credentialsId: 'aws-eks-kubeconfig', serverUrl: 'https://C7C8E947EF50560DA55D08142769EEDA.gr7.us-east-2.eks.amazonaws.com']) {
-                    sh "helm rollback rest-api-release"
-                }
+            echo "Deployment failed, rolling back to the previous version"
+            withKubeConfig([credentialsId: 'aws-eks-kubeconfig', serverUrl: 'https://C7C8E947EF50560DA55D08142769EEDA.gr7.us-east-2.eks.amazonaws.com']) {
+                sh "helm rollback rest-api-release"
             }
-        }
-        always {
-            echo "Cleaning up workspace"
-            deleteDir()
         }
     }
 }
