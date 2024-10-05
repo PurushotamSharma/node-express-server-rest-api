@@ -25,7 +25,7 @@ pipeline {
             steps {
                 echo "Pushing the image to Docker Hub"
                 withCredentials([usernamePassword(credentialsId: "dockerhubcred", passwordVariable: "dockerHubPass", usernameVariable: "dockerHubUser")]) {
-                    echo "${env.dockerHubPass}" | sh "docker login -u ${env.dockerHubUser} --password-stdin"
+                    sh "echo ${env.dockerHubPass} | docker login -u ${env.dockerHubUser} --password-stdin"
                     sh "docker tag rest-api:latest ${env.dockerHubUser}/rest-api:latest"
                     sh "docker push ${env.dockerHubUser}/rest-api:latest"
                 }
@@ -35,7 +35,7 @@ pipeline {
             steps {
                 echo "Deploying the code to AWS EKS"
                 sh "helm upgrade rest-api ./rest-api -n default"
-                sh "kubectl rollout restart deployment rest-api -n default"
+                sh "kubectl rollout restart deployment <your-deployment-name> -n default"
             }
         }
     }
