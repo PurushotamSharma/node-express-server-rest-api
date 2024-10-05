@@ -1,4 +1,3 @@
-
 pipeline {
     agent any
 
@@ -10,23 +9,23 @@ pipeline {
         }
         stage("Code") {
             steps {
-                echo "This is cloning the code"
+                echo "Cloning the code"
                 git url: "https://github.com/PurushotamSharma/node-express-server-rest-api.git", branch: "master"
-                echo "Cloning the code successfully"
+                echo "Cloned the code successfully"
             }
         }
         stage("Build") {
             steps {
-                echo "This is building the code"
+                echo "Building the code"
                 sh "whoami"
                 sh "docker build -t rest-api:latest ."
             }
         }
-        stage("Push to the Docker Hub") {
+        stage("Push to Docker Hub") {
             steps {
-                echo "This is pushing the image to Docker Hub"
+                echo "Pushing the image to Docker Hub"
                 withCredentials([usernamePassword(credentialsId: "dockerhubcred", passwordVariable: "dockerHubPass", usernameVariable: "dockerHubUser")]) {
-                    sh "docker login -u ${env.dockerHubUser} -p ${env.dockerHubPass}"
+                    echo "${env.dockerHubPass}" | sh "docker login -u ${env.dockerHubUser} --password-stdin"
                     sh "docker tag rest-api:latest ${env.dockerHubUser}/rest-api:latest"
                     sh "docker push ${env.dockerHubUser}/rest-api:latest"
                 }
@@ -34,15 +33,17 @@ pipeline {
         }
         stage("Deploy") {
             steps {
-                echo "This is deploying the code to AWS EKS"
+                echo "Deploying the code to AWS EKS"
                 sh "helm upgrade rest-api ./rest-api -n default"
-                sh "kubectl rollout restart deployment"
-                }
+                sh "kubectl rollout restart deployment rest-api -n default"
             }
         }
     }
 
     post {
+        success {
+            echo "Deployment completed successfully!"
+        }
         failure {
             echo "Deployment failed, rolling back to the previous version"
             withKubeConfig([credentialsId: 'aws-eks-kubeconfig', serverUrl: 'https://C7C8E947EF50560DA55D08142769EEDA.gr7.us-east-2.eks.amazonaws.com']) {
