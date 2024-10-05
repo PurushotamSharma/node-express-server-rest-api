@@ -3,17 +3,13 @@ pipeline {
     
     environment {
         DOCKER_IMAGE = "rest-api"
-        DOCKER_TAG = "latest"
+        DOCKER_TAG = "${BUILD_NUMBER}"
+        EKS_CLUSTER_NAME = "rest-api"
+        AWS_REGION = "us-east-2"
     }
     
     stages {
-        stage("Hello") {
-            steps {
-                echo "Starting the Pipeline"
-            }
-        }
-        
-        stage("Code") {
+        stage("Clone Code") {
             steps {
                 echo "Cloning the code"
                 git url: "https://github.com/PurushotamSharma/node-express-server-rest-api.git", branch: "master"
@@ -21,10 +17,9 @@ pipeline {
             }
         }
         
-        stage("Build") {
+        stage("Build Docker Image") {
             steps {
-                echo "Building the code"
-                sh "whoami"
+                echo "Building the Docker image"
                 sh "docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} ."
             }
         }
@@ -40,13 +35,20 @@ pipeline {
             }
         }
         
-        stage("Helm Deploy") {
+        stage("Deploy to EKS") {
             steps {
                 script {
-                    withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']]) {
-                        sh "aws eks update-kubeconfig --name sample --region us-east-2"
-                        sh "kubectl get ns"
-                        sh "helm upgrade --install restapi ./rest-api --set image.tag=${DOCKER_TAG}"
+                    withAWS(credentials: 'aws-credentials', region: "${AWS_REGION}") {
+                        echo "Updating kubeconfig"
+                        sh "aws eks update-kubeconfig --name ${EKS_CLUSTER_NAME} --region ${AWS_REGION}"
+                        
+                        echo "Deploying to EKS using Helm"
+                        sh """
+                            helm upgrade --install rest-api ./helm-chart \
+                            --set image.repository=\$dockerHubUser/${DOCKER_IMAGE} \
+                            --set image.tag=${DOCKER_TAG} \
+                            --namespace default
+                        """
                     }
                 }
             }
@@ -55,13 +57,10 @@ pipeline {
     
     post {
         success {
-            echo "Deployment completed successfully!"
+            echo "Deployment successful!"
         }
         failure {
-            echo "Deployment failed, rolling back to the previous version"
-            withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']]) {
-                sh "helm rollback restapi"
-            }
+            echo "Deployment failed"
         }
     }
 }
