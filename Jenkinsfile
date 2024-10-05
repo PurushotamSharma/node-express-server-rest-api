@@ -4,9 +4,7 @@ pipeline{
     stages{
         stage("Hello"){
             steps{
-                script{
-                    hello()
-                }
+                echo "Starting the Pipeline"
             }
         }
         stage("Code"){
