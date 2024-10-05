@@ -40,7 +40,10 @@ pipeline {
         stage('Copy Helm Chart') {
             steps {
                 script {
-                    // You may need to add credentials here if SSH key authentication is required
+                    // Add the Ubuntu server's SSH key to known hosts
+                    sh "ssh-keyscan -H ip-172-31-17-70 >> ~/.ssh/known_hosts"
+                    
+                    // Copy the Helm chart
                     sh "scp -r ${UBUNTU_SERVER}:${HELM_CHART_PATH} ${WORKSPACE}/helm-chart"
                 }
             }
