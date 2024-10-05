@@ -1,12 +1,18 @@
 pipeline {
     agent any
-
+    
+    environment {
+        DOCKER_IMAGE = "rest-api"
+        DOCKER_TAG = "latest"
+    }
+    
     stages {
         stage("Hello") {
             steps {
                 echo "Starting the Pipeline"
             }
         }
+        
         stage("Code") {
             steps {
                 echo "Cloning the code"
@@ -14,43 +20,47 @@ pipeline {
                 echo "Cloned the code successfully"
             }
         }
+        
         stage("Build") {
             steps {
                 echo "Building the code"
                 sh "whoami"
-                sh "docker build -t rest-api:latest ."
+                sh "docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} ."
             }
         }
+        
         stage("Push to Docker Hub") {
             steps {
                 echo "Pushing the image to Docker Hub"
                 withCredentials([usernamePassword(credentialsId: "dockerhubcred", passwordVariable: "dockerHubPass", usernameVariable: "dockerHubUser")]) {
-                    sh "echo ${env.dockerHubPass} | docker login -u ${env.dockerHubUser} --password-stdin"
-                    sh "docker tag rest-api:latest ${env.dockerHubUser}/rest-api:latest"
-                    sh "docker push ${env.dockerHubUser}/rest-api:latest"
+                    sh "echo \$dockerHubPass | docker login -u \$dockerHubUser --password-stdin"
+                    sh "docker tag ${DOCKER_IMAGE}:${DOCKER_TAG} \$dockerHubUser/${DOCKER_IMAGE}:${DOCKER_TAG}"
+                    sh "docker push \$dockerHubUser/${DOCKER_IMAGE}:${DOCKER_TAG}"
                 }
             }
         }
-        // Replace the "Deploy" stage with Helm Deploy stage
+        
         stage("Helm Deploy") {
             steps {
                 script {
-                    sh ('aws-eks update-kubeconfig --name sample --region us-east-2')
-                    sh "kubectl get ns"
-                    sh "helm install restapi ./rest-api"
+                    withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']]) {
+                        sh "aws eks update-kubeconfig --name sample --region us-east-2"
+                        sh "kubectl get ns"
+                        sh "helm upgrade --install restapi ./rest-api --set image.tag=${DOCKER_TAG}"
+                    }
                 }
             }
         }
     }
-
+    
     post {
         success {
             echo "Deployment completed successfully!"
         }
         failure {
             echo "Deployment failed, rolling back to the previous version"
-            withKubeConfig([credentialsId: 'aws-eks-kubeconfig', serverUrl: 'https://C7C8E947EF50560DA55D08142769EEDA.gr7.us-east-2.eks.amazonaws.com']) {
-                sh "helm rollback rest-api"
+            withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']]) {
+                sh "helm rollback restapi"
             }
         }
     }
