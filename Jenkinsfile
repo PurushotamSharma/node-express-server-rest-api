@@ -2,9 +2,8 @@ pipeline {
     agent any
 
     environment {
-        DOCKER_IMAGE = "your-dockerhub-username/rest-api"
+        DOCKER_IMAGE = "purushotamsharma/rest-api"
         DOCKER_TAG = "${env.BUILD_NUMBER}"
-        KUBECONFIG = credentials('kubeconfig-credentials-id')
     }
     
     stages {
@@ -16,42 +15,55 @@ pipeline {
         
         stage("Build") {
             steps {
-                sh "docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} ."
+                script {
+                    sh "docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} ."
+                }
             }
         }
         
         stage("Push to Docker Hub") {
             steps {
-                withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials-id', passwordVariable: 'DOCKER_PASSWORD', usernameVariable: 'DOCKER_USERNAME')]) {
-                    sh "echo $DOCKER_PASSWORD | docker login -u $DOCKER_USERNAME --password-stdin"
-                    sh "docker push ${DOCKER_IMAGE}:${DOCKER_TAG}"
+                script {
+                    withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', passwordVariable: 'DOCKER_PASSWORD', usernameVariable: 'DOCKER_USERNAME')]) {
+                        sh "echo $DOCKER_PASSWORD | docker login -u $DOCKER_USERNAME --password-stdin"
+                        sh "docker push ${DOCKER_IMAGE}:${DOCKER_TAG}"
+                    }
                 }
             }
         }
         
         stage("Deploy to EKS") {
             steps {
-                sh "kubectl --kubeconfig $KUBECONFIG get nodes"
-                sh """
-                    helm upgrade --install rest-api-release ./helm-chart \
-                    --set image.repository=${DOCKER_IMAGE} \
-                    --set image.tag=${DOCKER_TAG} \
-                    --kubeconfig $KUBECONFIG
-                """
+                script {
+                    withAWS(credentials: 'aws-credentials', region: 'us-east-2') {
+                        sh "aws eks get-token --cluster-name rest-api | kubectl apply -f -"
+                        sh """
+                            helm upgrade --install rest-api-release ./helm-chart \
+                            --set image.repository=${DOCKER_IMAGE} \
+                            --set image.tag=${DOCKER_TAG}
+                        """
+                    }
+                }
             }
         }
     }
     
     post {
         always {
-            sh "docker logout"
+            script {
+                sh "docker logout"
+            }
         }
         success {
             echo "Deployment successful!"
         }
         failure {
             echo "Deployment failed"
-            sh "helm --kubeconfig $KUBECONFIG rollback rest-api-release 0 || true"
+            script {
+                withAWS(credentials: 'aws-credentials', region: 'us-east-2') {
+                    sh "helm rollback rest-api-release 0 || true"
+                }
+            }
         }
     }
 }
