@@ -9,7 +9,7 @@ pipeline {
         AWS_REGION = "us-east-2"
         KUBECONFIG = "${WORKSPACE}/kubeconfig"
         HELM_CHART_PATH = "/home/ubuntu/rest-api"
-        UBUNTU_SERVER = "ubuntu@ip-172-31-17-70"
+        UBUNTU_SERVER = "ubuntu@ec2-18-118-206-196.us-east-2.compute.amazonaws.com"
     }
     
     stages {
@@ -40,11 +40,12 @@ pipeline {
         stage('Copy Helm Chart') {
             steps {
                 script {
-                    // Add the Ubuntu server's SSH key to known hosts
-                    sh "ssh-keyscan -H ip-172-31-17-70 >> ~/.ssh/known_hosts"
-                    
-                    // Copy the Helm chart
-                    sh "scp -r ${UBUNTU_SERVER}:${HELM_CHART_PATH} ${WORKSPACE}/helm-chart"
+                    sshagent(credentials: ['ubuntu-server-ssh-key']) {
+                        sh """
+                            ssh-keyscan -H ec2-18-118-206-196.us-east-2.compute.amazonaws.com >> ~/.ssh/known_hosts
+                            scp -r ${UBUNTU_SERVER}:${HELM_CHART_PATH} ${WORKSPACE}/helm-chart
+                        """
+                    }
                 }
             }
         }
