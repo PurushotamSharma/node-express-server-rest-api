@@ -35,7 +35,9 @@ pipeline {
         stage("Helm Deploy") {
             steps {
                 script {
-                    sh "helm upgrade first --install rest-api --namespace default --set image.tag=${BUILD_NUMBER}"
+                    sh ('aws-eks update-kubeconfig --name sample --region us-east-2')
+                    sh "kubectl get ns"
+                    sh "helm install restapi ./rest-api"
                 }
             }
         }
