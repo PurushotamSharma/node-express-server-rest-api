@@ -1,64 +1,53 @@
+
 pipeline {
     agent any
 
-    environment {
-        DOCKER_IMAGE = "purushotamsharma/rest-api"
-        DOCKER_TAG = "${env.BUILD_NUMBER}"
-        AWS_DEFAULT_REGION = "us-east-2"
-        EKS_CLUSTER_NAME = "rest-api"
-    }
-    
     stages {
-        stage("Checkout") {
+        stage("Hello") {
             steps {
-                checkout scm
+                echo "Starting the Pipeline"
             }
         }
-        
+        stage("Code") {
+            steps {
+                echo "This is cloning the code"
+                git url: "https://github.com/PurushotamSharma/node-express-server-rest-api.git", branch: "master"
+                echo "Cloning the code successfully"
+            }
+        }
         stage("Build") {
             steps {
-                script {
-                    sh "docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} ."
+                echo "This is building the code"
+                sh "whoami"
+                sh "docker build -t rest-api:latest ."
+            }
+        }
+        stage("Push to the Docker Hub") {
+            steps {
+                echo "This is pushing the image to Docker Hub"
+                withCredentials([usernamePassword(credentialsId: "dockerhubcred", passwordVariable: "dockerHubPass", usernameVariable: "dockerHubUser")]) {
+                    sh "docker login -u ${env.dockerHubUser} -p ${env.dockerHubPass}"
+                    sh "docker tag rest-api:latest ${env.dockerHubUser}/rest-api:latest"
+                    sh "docker push ${env.dockerHubUser}/rest-api:latest"
                 }
             }
         }
-        
-        stage("Push to Docker Hub") {
+        stage("Deploy") {
             steps {
-                script {
-                    withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', passwordVariable: 'DOCKER_PASSWORD', usernameVariable: 'DOCKER_USERNAME')]) {
-                        sh "echo $DOCKER_PASSWORD | docker login -u $DOCKER_USERNAME --password-stdin"
-                        sh "docker push ${DOCKER_IMAGE}:${DOCKER_TAG}"
-                    }
-                }
-            }
-        }
-        
-        stage("Deploy to EKS") {
-            steps {
-                script {
-                    withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', accessKeyVariable: 'AWS_ACCESS_KEY_ID', credentialsId: 'aws-credentials', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']]) {
-                        sh """
-                            aws eks --region ${AWS_DEFAULT_REGION} update-kubeconfig --name ${EKS_CLUSTER_NAME}
-                            kubectl set image deployment/your-deployment-name your-container-name=${DOCKER_IMAGE}:${DOCKER_TAG}
-                        """
-                    }
+                echo "This is deploying the code to AWS EKS"
+                sh "helm upgrade rest-api ./rest-api -n default"
+                sh "kubectl rollout restart deployment"
                 }
             }
         }
     }
-    
+
     post {
-        always {
-            script {
-                sh "docker logout"
-            }
-        }
-        success {
-            echo "Deployment successful!"
-        }
         failure {
-            echo "Deployment failed"
+            echo "Deployment failed, rolling back to the previous version"
+            withKubeConfig([credentialsId: 'aws-eks-kubeconfig', serverUrl: 'https://C7C8E947EF50560DA55D08142769EEDA.gr7.us-east-2.eks.amazonaws.com']) {
+                sh "helm rollback rest-api"
+            }
         }
     }
 }
