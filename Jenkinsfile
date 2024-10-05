@@ -37,7 +37,7 @@ pipeline {
                 // Note: If you want to specify a namespace, add it here.
                 withKubeConfig([credentialsId: 'aws-eks-kubeconfig']) {  
                     // Upgrade or install the Helm release
-                    sh "helm upgrade --install rest-api-release ./helm-chart --set image.repository=${env.dockerHubUser}/rest-api --set image.tag=latest --wait --timeout=300"
+                    sh "helm upgrade --install rest-api-release ./helm-chart --set image.repository=${env.dockerHubUser}/rest-api --set image.tag=latest --wait --timeout=300s"
                 }
             }
         }
