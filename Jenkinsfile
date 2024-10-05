@@ -6,6 +6,7 @@ pipeline {
         DOCKER_TAG = "${BUILD_NUMBER}"
         EKS_CLUSTER_NAME = "rest-api"
         AWS_REGION = "us-east-2"
+        KUBECONFIG = "${WORKSPACE}/kubeconfig"
     }
     
     stages {
@@ -38,14 +39,13 @@ pipeline {
         stage("Deploy to EKS") {
             steps {
                 script {
-                    withAWS(credentials: 'aws-credentials', region: "${AWS_REGION}") {
-                        echo "Updating kubeconfig"
-                        sh "aws eks update-kubeconfig --name ${EKS_CLUSTER_NAME} --region ${AWS_REGION}"
-                        
-                        echo "Deploying to EKS using Helm"
+                    withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', accessKeyVariable: 'AWS_ACCESS_KEY_ID', credentialsId: 'aws-credentials', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']]) {
                         sh """
+                            aws eks --region ${AWS_REGION} update-kubeconfig --name ${EKS_CLUSTER_NAME} --kubeconfig ${KUBECONFIG}
+                            export KUBECONFIG=${KUBECONFIG}
+                            kubectl get nodes
                             helm upgrade --install rest-api ./helm-chart \
-                            --set image.repository=\$dockerHubUser/${DOCKER_IMAGE} \
+                            --set image.repository=${DOCKER_IMAGE} \
                             --set image.tag=${DOCKER_TAG} \
                             --namespace default
                         """
@@ -61,6 +61,9 @@ pipeline {
         }
         failure {
             echo "Deployment failed"
+        }
+        always {
+            sh "rm -f ${KUBECONFIG}"
         }
     }
 }
