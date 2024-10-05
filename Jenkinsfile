@@ -8,6 +8,8 @@ pipeline {
         EKS_CLUSTER_NAME = "rest-api"
         AWS_REGION = "us-east-2"
         KUBECONFIG = "${WORKSPACE}/kubeconfig"
+        HELM_CHART_PATH = "/home/ubuntu/rest-api"
+        UBUNTU_SERVER = "ubuntu@ip-172-31-17-70"
     }
     
     stages {
@@ -35,6 +37,15 @@ pipeline {
             }
         }
         
+        stage('Copy Helm Chart') {
+            steps {
+                script {
+                    // You may need to add credentials here if SSH key authentication is required
+                    sh "scp -r ${UBUNTU_SERVER}:${HELM_CHART_PATH} ${WORKSPACE}/helm-chart"
+                }
+            }
+        }
+        
         stage('Deploy to EKS') {
             steps {
                 script {
@@ -51,24 +62,14 @@ pipeline {
                             echo "Listing nodes:"
                             kubectl get nodes
                             
-                            echo "Contents of the current directory:"
-                            ls -la
+                            echo "Contents of the helm-chart directory:"
+                            ls -la ${WORKSPACE}/helm-chart
                             
-                            CHART_DIR=\$(find . -name Chart.yaml -print0 | xargs -0 -n1 dirname | head -n1)
-                            if [ -n "\$CHART_DIR" ]; then
-                                echo "Helm chart found in: \$CHART_DIR"
-                                echo "Contents of Helm chart directory:"
-                                ls -la \$CHART_DIR
-                                
-                                helm upgrade --install rest-api \$CHART_DIR \
-                                    --set image.repository=${DOCKERHUB_CREDENTIALS_USR}/${DOCKER_IMAGE} \
-                                    --set image.tag=${DOCKER_TAG} \
-                                    --namespace default \
-                                    --debug
-                            else
-                                echo "No Helm chart found in the repository"
-                                exit 1
-                            fi
+                            helm upgrade --install rest-api ${WORKSPACE}/helm-chart \
+                                --set image.repository=${DOCKERHUB_CREDENTIALS_USR}/${DOCKER_IMAGE} \
+                                --set image.tag=${DOCKER_TAG} \
+                                --namespace default \
+                                --debug
                         """
                     }
                 }
