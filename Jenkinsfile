@@ -31,9 +31,12 @@ pipeline {
                 }
             }
         }
-        stage("Deploy") {
+        // Replace the "Deploy" stage with Helm Deploy stage
+        stage("Helm Deploy") {
             steps {
-               sh "kubectl apply -f deployment.yml"
+                script {
+                    sh "helm upgrade first --install rest-api --namespace default --set image.tag=${BUILD_NUMBER}"
+                }
             }
         }
     }
