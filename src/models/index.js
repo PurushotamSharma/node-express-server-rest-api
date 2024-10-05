@@ -1,7 +1,7 @@
 let users = {
   1: {
     id: '1',
-    username: 'Testing Completed',
+    username: 'Demo Completed',
   },
   2: {
     id: '2',
