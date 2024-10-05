@@ -10,6 +10,8 @@ pipeline {
         KUBECONFIG = "${WORKSPACE}/kubeconfig"
         HELM_CHART_PATH = "/home/ubuntu/rest-api"
         UBUNTU_SERVER = "ubuntu@ec2-18-118-206-196.us-east-2.compute.amazonaws.com"
+        DEPLOYMENT_NAME = "rest-api"
+        NAMESPACE = "default"
     }
     
     stages {
@@ -69,11 +71,38 @@ pipeline {
                             echo "Contents of the helm-chart directory:"
                             ls -la ${WORKSPACE}/helm-chart
                             
-                            helm upgrade --install rest-api ${WORKSPACE}/helm-chart \
+                            helm upgrade --install ${DEPLOYMENT_NAME} ${WORKSPACE}/helm-chart \
                                 --set image.repository=${DOCKERHUB_CREDENTIALS_USR}/${DOCKER_IMAGE} \
                                 --set image.tag=${DOCKER_TAG} \
-                                --namespace default \
+                                --namespace ${NAMESPACE} \
                                 --debug
+                        """
+                    }
+                }
+            }
+        }
+        
+        stage('Verify Deployment') {
+            steps {
+                script {
+                    withCredentials([usernamePassword(credentialsId: 'aws-credentials', usernameVariable: 'AWS_ACCESS_KEY_ID', passwordVariable: 'AWS_SECRET_ACCESS_KEY')]) {
+                        sh """
+                            export KUBECONFIG=${KUBECONFIG}
+                            kubectl rollout status deployment/${DEPLOYMENT_NAME} -n ${NAMESPACE} --timeout=300s
+                        """
+                    }
+                }
+            }
+        }
+        
+        stage('Restart Deployment') {
+            steps {
+                script {
+                    withCredentials([usernamePassword(credentialsId: 'aws-credentials', usernameVariable: 'AWS_ACCESS_KEY_ID', passwordVariable: 'AWS_SECRET_ACCESS_KEY')]) {
+                        sh """
+                            export KUBECONFIG=${KUBECONFIG}
+                            kubectl rollout restart deployment/${DEPLOYMENT_NAME} -n ${NAMESPACE}
+                            kubectl rollout status deployment/${DEPLOYMENT_NAME} -n ${NAMESPACE} --timeout=300s
                         """
                     }
                 }
@@ -92,7 +121,16 @@ pipeline {
             echo "Deployment successful!"
         }
         failure {
-            echo "Deployment failed"
+            echo "Deployment failed, rolling back..."
+            script {
+                withCredentials([usernamePassword(credentialsId: 'aws-credentials', usernameVariable: 'AWS_ACCESS_KEY_ID', passwordVariable: 'AWS_SECRET_ACCESS_KEY')]) {
+                    sh """
+                        export KUBECONFIG=${KUBECONFIG}
+                        helm rollback ${DEPLOYMENT_NAME} 0 -n ${NAMESPACE}
+                        kubectl rollout status deployment/${DEPLOYMENT_NAME} -n ${NAMESPACE} --timeout=300s
+                    """
+                }
+            }
         }
     }
 }
