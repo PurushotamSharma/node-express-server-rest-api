@@ -39,13 +39,16 @@ pipeline {
         stage("Deploy to EKS") {
             steps {
                 script {
-                    withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', accessKeyVariable: 'AWS_ACCESS_KEY_ID', credentialsId: 'aws-credentials', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']]) {
+                    withCredentials([usernamePassword(credentialsId: 'aws-credentials', usernameVariable: 'AWS_ACCESS_KEY_ID', passwordVariable: 'AWS_SECRET_ACCESS_KEY')]) {
                         sh """
+                            aws configure set aws_access_key_id \$AWS_ACCESS_KEY_ID
+                            aws configure set aws_secret_access_key \$AWS_SECRET_ACCESS_KEY
+                            aws configure set region ${AWS_REGION}
                             aws eks --region ${AWS_REGION} update-kubeconfig --name ${EKS_CLUSTER_NAME} --kubeconfig ${KUBECONFIG}
                             export KUBECONFIG=${KUBECONFIG}
                             kubectl get nodes
                             helm upgrade --install rest-api ./helm-chart \
-                            --set image.repository=${DOCKER_IMAGE} \
+                            --set image.repository=\$dockerHubUser/${DOCKER_IMAGE} \
                             --set image.tag=${DOCKER_TAG} \
                             --namespace default
                         """
@@ -64,6 +67,8 @@ pipeline {
         }
         always {
             sh "rm -f ${KUBECONFIG}"
+            sh "aws configure set aws_access_key_id ''"
+            sh "aws configure set aws_secret_access_key ''"
         }
     }
 }
