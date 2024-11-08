@@ -3,7 +3,7 @@ version: 0.2
 phases:
   install:
     runtime-versions:
-      nodejs: 20 # Use the appropriate Node.js version for your project
+      nodejs: 20 # Adjust the Node.js version if needed
     commands:
       - echo "Installing dependencies..."
       - npm install
@@ -11,18 +11,14 @@ phases:
   pre_build:
     commands:
       - echo "Running tests..."
-      - npm test  # Optional: run tests if you have them set up
-      
+      - npm test  # Optional if tests are set up
+
+  build:
+    commands:
+      - echo "Building the project..."
+      - npm run build  # Corrected command
+
   post_build:
     commands:
       - echo "Starting the application..."
-      - npm start  # Start the application
-
-artifacts:
-  files:
-    - '**/*'  # Include all files in the build output (optional)
-  discard-paths: yes
-
-cache:
-  paths:
-    - 'node_modules/**/*'
+      - npm start  # Start the app if necessary
