@@ -3,7 +3,7 @@ version: 0.2
 phases:
   install:
     runtime-versions:
-      nodejs: 14 # Use the appropriate Node.js version for your project
+      nodejs: 20 # Use the appropriate Node.js version for your project
     commands:
       - echo "Installing dependencies..."
       - npm install
@@ -16,12 +16,12 @@ phases:
   build:
     commands:
       - echo "Building the project..."
-      - npm run build  # Adjust if you have a build script in your package.json
+      - npm run build  # Use `npm start` if you don't have a build script
 
   post_build:
     commands:
       - echo "Starting the application..."
-      - npm start  # Ensure this matches your start script, or use pm2 for production
+      - npm start  # Start the application
 
 artifacts:
   files:
