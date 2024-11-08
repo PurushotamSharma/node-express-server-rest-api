@@ -12,12 +12,7 @@ phases:
     commands:
       - echo "Running tests..."
       - npm test  # Optional: run tests if you have them set up
-
-  build:
-    commands:
-      - echo "Building the project..."
-      - npm run build  # Use `npm start` if you don't have a build script
-
+      
   post_build:
     commands:
       - echo "Starting the application..."
